@@ -1,0 +1,104 @@
+name: bitcoin-core
+version: '25.0'
+summary: Fully validating Bitcoin peer-to-peer network node, wallet and GUI
+description: |
+  Bitcoin Core connects to the Bitcoin peer-to-peer network to download and
+  fully validate blocks and transactions. It also includes a wallet and
+  graphical user interface.
+
+grade: stable
+confinement: strict
+base: core18
+
+apps:
+  daemon:
+    command: bitcoind
+    plugs: [home, removable-media, network, network-bind]
+    environment:
+      # Override HOME so the datadir is located at
+      # ~/snap/bitcoin-core/common/.bitcoin/ instead of
+      # ~/snap/bitcoin-core/current/.bitcoin/, and each new version of the
+      # snap won't have a different data directory:
+      # https://docs.snapcraft.io/environment-variables/7983
+      HOME: $SNAP_USER_COMMON
+  qt:
+    command: desktop-launch bitcoin-qt
+    plugs: [home, removable-media, network, network-bind, desktop, x11, unity7]
+    environment:
+      HOME: $SNAP_USER_COMMON
+      DISABLE_WAYLAND: 1
+  cli:
+    command: bitcoin-cli
+    plugs: [home, removable-media, network]
+    environment:
+      HOME: $SNAP_USER_COMMON
+  tx:
+    command: bitcoin-tx
+    environment:
+      HOME: $SNAP_USER_COMMON
+  wallet:
+    command: bitcoin-wallet
+    plugs: [home, removable-media]
+    environment:
+      HOME: $SNAP_USER_COMMON
+  util:
+    command: bitcoin-util
+    environment:
+      HOME: $SNAP_USER_COMMON
+
+parts:
+  # Needed to supply desktop-launch
+  # Paste from https://github.com/ubuntu/snapcraft-desktop-helpers/blob/master/snapcraft.yaml
+  # Boilerplate seems to be required according to https://bugs.launchpad.net/snapcraft/+bug/1800057
+  desktop-qt5:
+    source: https://github.com/ubuntu/snapcraft-desktop-helpers.git
+    source-depth: 1
+    source-subdir: qt
+    source-commit: ec861254c2a1d2447b2c589446e6cdf04c75c260
+    plugin: make
+    make-parameters: ["FLAVOR=qt5"]
+    build-packages:
+      - build-essential
+      - qtbase5-dev
+      - dpkg-dev
+    stage-packages:
+      - libxkbcommon0
+      - ttf-ubuntu-font-family
+      - dmz-cursor-theme
+      - light-themes
+      - adwaita-icon-theme
+      - gnome-themes-standard
+      - shared-mime-info
+      - libqt5gui5
+      - libgdk-pixbuf2.0-0
+      - libqt5svg5 # for loading icon themes which are svg
+      - try: [appmenu-qt5] # not available on core18
+      - locales-all
+      - xdg-user-dirs
+      - fcitx-frontend-qt5
+
+  bitcoin-core:
+    plugin: nil
+    override-build: | 
+      env | grep SNAP
+      wget https://bitcoincore.org/bin/bitcoin-core-${SNAPCRAFT_PROJECT_VERSION}/SHA256SUMS
+      wget https://bitcoincore.org/bin/bitcoin-core-${SNAPCRAFT_PROJECT_VERSION}/bitcoin-${SNAPCRAFT_PROJECT_VERSION}.tar.gz
+      wget https://bitcoincore.org/bin/bitcoin-core-${SNAPCRAFT_PROJECT_VERSION}/bitcoin-${SNAPCRAFT_PROJECT_VERSION}-${SNAPCRAFT_ARCH_TRIPLET}.tar.gz
+      echo "74ae008c8c0a60c4b8a773b73d743a74d162ff2c53108be99015c82e33b8d0d4  SHA256SUMS" | sha256sum --check
+      sha256sum --ignore-missing --check SHA256SUMS
+      tar -xvf bitcoin-${SNAPCRAFT_PROJECT_VERSION}-${SNAPCRAFT_ARCH_TRIPLET}.tar.gz
+      tar -xvf bitcoin-${SNAPCRAFT_PROJECT_VERSION}.tar.gz
+      echo "Running tests ..."
+      bitcoin-${SNAPCRAFT_PROJECT_VERSION}/bin/test_bitcoin
+      install -m 0755 -D -t $SNAPCRAFT_PART_INSTALL/bin bitcoin-${SNAPCRAFT_PROJECT_VERSION}/bin/bitcoind
+      install -m 0755 -D -t $SNAPCRAFT_PART_INSTALL/bin bitcoin-${SNAPCRAFT_PROJECT_VERSION}/bin/bitcoin-qt
+      install -m 0755 -D -t $SNAPCRAFT_PART_INSTALL/bin bitcoin-${SNAPCRAFT_PROJECT_VERSION}/bin/bitcoin-cli
+      install -m 0755 -D -t $SNAPCRAFT_PART_INSTALL/bin bitcoin-${SNAPCRAFT_PROJECT_VERSION}/bin/bitcoin-tx
+      install -m 0755 -D -t $SNAPCRAFT_PART_INSTALL/bin bitcoin-${SNAPCRAFT_PROJECT_VERSION}/bin/bitcoin-wallet
+      install -m 0755 -D -t $SNAPCRAFT_PART_INSTALL/bin bitcoin-${SNAPCRAFT_PROJECT_VERSION}/bin/bitcoin-util
+      wget https://raw.githubusercontent.com/bitcoin/bitcoin/v${SNAPCRAFT_PROJECT_VERSION}/share/pixmaps/bitcoin128.png
+      install -m 0644 -D -t $SNAPCRAFT_PART_INSTALL/share/pixmaps bitcoin128.png
+    build-packages:
+      - wget
+    after:
+      - desktop-qt5
